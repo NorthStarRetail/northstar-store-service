@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: northstar-store-service-db-configmap
+data:
+  db-host: "northstar-store-service-db-svc"
+  db-name: "northstar_store_db"
+  db-port: "5432"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: northstar-store-service-db-secret
+data:
+  db-user: "cG9zdGdyZXM="
+  db-pass: "cm9vdA=="
+type: Opaque
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: northstar-store-service-db-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: northstar-store-service-db-deployment
+spec:
+  selector:
+    matchLabels:
+      app: northstar-store-service-db-deployment
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: northstar-store-service-db-deployment
+    spec:
+      containers:
+        - name: northstar-store-service-db
+          image: postgres:alpine
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: northstar-store-service-db-secret
+                  key: db-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: northstar-store-service-db-secret
+                  key: db-pass
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: northstar-store-service-db-configmap
+                  key: db-name
+          volumeMounts:
+            - name: northstar-store-service-db-data
+              mountPath: "/var/lib/postgresql/data"
+      volumes:
+        - name: northstar-store-service-db-data
+          persistentVolumeClaim:
+            claimName: northstar-store-service-db-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: northstar-store-service-db-svc
+spec:
+  selector:
+    app: northstar-store-service-db-deployment
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+  type: ClusterIP
